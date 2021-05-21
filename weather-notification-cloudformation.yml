@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "WeatherNotificationSystem"
+Resources:
+    LambdaFunction:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            Description: ""
+            Environment: 
+                Variables: 
+                    topicArn: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:${DynamoDBTable}"
+            FunctionName: !Ref DynamoDBTable
+            Handler: !Sub "${DynamoDBTable}.lambda_handler"
+            Code: 
+                S3Bucket: !Sub "awslambda-${AWS::Region}-tasks"
+                S3Key: !Sub "/snapshots/${AWS::AccountId}/${DynamoDBTable}-034212f5-c62c-47e6-9797-6e973517ee1f"
+                S3ObjectVersion: "spiyG.H5ffvicAq7BNobo7mov55flhgv"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/weather-role-9ptkn2i4"
+            Runtime: "python3.8"
+            Timeout: 240
+            TracingConfig: 
+                Mode: "PassThrough"
+            Layers: 
+              - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:requests:1"
+
+    LambdaPermission:
+        Type: "AWS::Lambda::Permission"
+        Properties:
+            Action: "lambda:InvokeFunction"
+            FunctionName: !GetAtt LambdaFunction.Arn
+            Principal: "events.amazonaws.com"
+            SourceArn: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/${LambdaFunction}_lambda"
+
+    EventsRule:
+        Type: "AWS::Events::Rule"
+        Properties:
+            Name: !Sub "${LambdaFunction}_lambda"
+            ScheduleExpression: "rate(8 minutes)"
+            State: "ENABLED"
+            Targets: 
+              - 
+                Arn: !GetAtt LambdaFunction.Arn
+                Id: "Id524f3359-7abb-4ec9-8b2b-fb52e90731a9"
+            EventBusName: "default"
+
+    DynamoDBTable:
+        Type: "AWS::DynamoDB::Table"
+        Properties:
+            AttributeDefinitions: 
+              - 
+                AttributeName: "id"
+                AttributeType: "S"
+            BillingMode: "PAY_PER_REQUEST"
+            TableName: !GetAtt SNSTopic.TopicName
+            KeySchema: 
+              - 
+                AttributeName: "id"
+                KeyType: "HASH"
+
+    SNSTopic:
+        Type: "AWS::SNS::Topic"
+        Properties:
+            DisplayName: "weather"
+            TopicName: "weather"
+
+    SNSTopicPolicy:
+        Type: "AWS::SNS::TopicPolicy"
+        Properties:
+            PolicyDocument: !Sub "{\"Version\":\"2008-10-17\",\"Id\":\"__default_policy_ID\",\"Statement\":[{\"Sid\":\"__default_statement_ID\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"*\"},\"Action\":[\"SNS:GetTopicAttributes\",\"SNS:SetTopicAttributes\",\"SNS:AddPermission\",\"SNS:RemovePermission\",\"SNS:DeleteTopic\",\"SNS:Subscribe\",\"SNS:ListSubscriptionsByTopic\",\"SNS:Publish\",\"SNS:Receive\"],\"Resource\":\"arn:aws:sns:${AWS::Region}:${AWS::AccountId}:${LambdaFunction}\",\"Condition\":{\"StringEquals\":{\"AWS:SourceOwner\":\"${AWS::AccountId}\"}}}]}"
+            Topics: 
+              - !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:${LambdaFunction}"
+
